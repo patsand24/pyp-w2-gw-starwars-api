@@ -1,6 +1,8 @@
 from starwars_api.client import SWAPIClient
 from starwars_api.exceptions import SWAPIClientError
 
+
+
 api_client = SWAPIClient()
 
 
@@ -11,7 +13,9 @@ class BaseModel(object):
         Dynamically assign all attributes in `json_data` as instance
         attributes of the Model.
         """
-        pass
+        # setattr(self, key, value) self.key = value
+        for key, value in json_data.items():
+            setattr(self, key, value)
 
     @classmethod
     def get(cls, resource_id):
@@ -19,7 +23,9 @@ class BaseModel(object):
         Returns an object of current Model requesting data to SWAPI using
         the api_client.
         """
-        pass
+        func = getattr(api_client, "get_{}".format(cls.RESOURCE_NAME))
+        json_data = func(resource_id)
+        return BaseModel(json_data)
 
     @classmethod
     def all(cls):
@@ -28,7 +34,10 @@ class BaseModel(object):
         later in charge of performing requests to SWAPI for each of the
         pages while looping.
         """
-        pass
+        if cls.RESOURCE_NAME == 'people':
+            return PeopleQuerySet()
+        elif cls.RESOURCE_NAME == 'films':
+            return FilmsQuerySet()
 
 
 class People(BaseModel):
@@ -55,17 +64,48 @@ class Films(BaseModel):
 class BaseQuerySet(object):
 
     def __init__(self):
-        pass
+       # self.page = 0
+        self.counter = 0
+        self.objects = []
+        self._count = None
+        self.page_counter = 1
 
     def __iter__(self):
-        pass
+        return self.__class__()
+        #could also return self
 
     def __next__(self):
         """
         Must handle requests to next pages in SWAPI when objects in the current
         page were all consumed.
         """
-        pass
+        while True:
+            if self.counter + 1 > len(self.objects):
+                try:
+                    self._get_next_page()
+                except SWAPIClientError:
+                    raise StopIteration()
+            elem = self.objects[self.counter]
+            self.counter += 1
+            return elem
+
+
+    def _get_next_page(self):
+    #get_RESOURCENAME_pagenum
+    #getattr(api_client, "get_{}".format(self.RESOURCE_NAME))(page=self.page_counter)
+    #/people?page=2
+
+        next_page = getattr(api_client, "get_{}".format(self.RESOURCE_NAME))(page=self.page_counter)
+        Model = eval(self.RESOURCE_NAME.title())
+        for item in next_page['results']:
+            self.objects.append(Model(item))
+
+        self._count = next_page['count']
+
+        self.page_counter += 1
+
+        #for item in next_page['results']:
+
 
     next = __next__
 
@@ -75,7 +115,12 @@ class BaseQuerySet(object):
         If the counter is not persisted as a QuerySet instance attr,
         a new request is performed to the API in order to get it.
         """
-        pass
+    #if not qs.attr:
+        #request API to get it and return it
+    #return qs.attr
+        if not self._count:
+            self._get_next_page()
+        return self._count
 
 
 class PeopleQuerySet(BaseQuerySet):
